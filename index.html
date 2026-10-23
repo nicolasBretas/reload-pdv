@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Reload PDV</title>
+
+  <link rel="stylesheet" href="style.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-logo">
+          <img src="assets/logo.png" alt="Logo Reload" onerror="this.style.display='none'" />
+          <span>R</span>
+        </div>
+
+        <div>
+          <p class="eyebrow">Sistema interno</p>
+          <h1>Reload PDV</h1>
+          <p class="subtitle">Loja de conveniência, estoque, caixa, vendas e relatórios</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="operator-chip">
+          <span>Operador</span>
+          <strong id="currentOperatorName">Não logado</strong>
+          <small id="currentOperatorRole">--</small>
+        </div>
+
+        <button id="btnLogout" class="btn btn-secondary" type="button">
+          Sair
+        </button>
+
+        <button id="btnSync" class="btn btn-secondary" type="button">
+          Sincronizar
+        </button>
+
+        <button id="btnOpenCashHeader" class="btn btn-primary" type="button">
+          Abrir caixa
+        </button>
+      </div>
+    </header>
+
+    <section class="system-status">
+      <div>
+        <span>Status:</span>
+        <strong id="connectionStatus" class="status-pill status-loading">Verificando...</strong>
+      </div>
+
+      <div>
+        <span>Caixa:</span>
+        <strong id="cashStatus" class="status-pill status-neutral">--</strong>
+      </div>
+
+      <div>
+        <span>Última sincronização:</span>
+        <strong id="lastSync">--</strong>
+      </div>
+
+      <div>
+        <span>Acesso de outros aparelhos:</span>
+        <strong id="networkAddress">--</strong>
+      </div>
+    </section>
+
+    <nav class="app-nav" aria-label="Navegação principal">
+      <button class="nav-button active" type="button" data-view-target="pdv">PDV</button>
+      <button class="nav-button" type="button" data-view-target="produtos">Produtos</button>
+      <button class="nav-button" type="button" data-view-target="cadastromassa">Cadastro em massa</button>
+      <button class="nav-button" type="button" data-view-target="fornecedores">Fornecedores</button>
+      <button class="nav-button" type="button" data-view-target="entradaestoque">Entrada de estoque</button>
+      <button class="nav-button" type="button" data-view-target="clientes">Clientes</button>
+      <button class="nav-button" type="button" data-view-target="pedidos">Pedidos abertos</button>
+      <button class="nav-button" type="button" data-view-target="devolucoes">Devoluções</button>
+      <button class="nav-button" type="button" data-view-target="caixa">Caixa diário</button>
+      <button class="nav-button" type="button" data-view-target="relatorios">Relatórios / DAS</button>
+      <button class="nav-button" type="button" data-view-target="diagnostico">Diagnóstico</button>
+    </nav>
+
+    <main>
+      <div id="feedbackMessage" class="feedback hidden"></div>
+
+      <section id="view-pdv" class="view active">
+        <div class="pdv-layout">
+          <section class="panel products-pdv-panel">
+            <div class="panel-header">
+              <div>
+                <h2>Produtos</h2>
+                <p>Pesquise, escaneie o código ou clique no produto para adicionar ao pedido atual.</p>
+              </div>
+
+              <div class="search-box">
+                <input
+                  id="pdvProductSearch"
+                  type="search"
+                  placeholder="Buscar produto por nome, código, categoria..."
+                  autocomplete="off"
+                />
+              </div>
+            </div>
+
+            <div class="barcode-box">
+              <label for="barcodeInput">Leitor de código de barras</label>
+              <input
+                id="barcodeInput"
+                class="barcode-input"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="Escaneie o código de barras aqui"
+              />
+              <small>Use leitor USB ou Bluetooth em modo teclado. Ideal configurar para enviar Enter após a leitura.</small>
+            </div>
+
+            <div class="category-filter" id="categoryFilter">
+              <button class="chip active" type="button" data-category-filter="todos">Todos</button>
+            </div>
+
+            <div id="pdvProductSections" class="product-sections">
+              <div class="empty-state">Carregando produtos...</div>
+            </div>
+          </section>
+
+          <aside class="panel current-order-panel">
+            <div class="panel-header compact">
+              <div>
+                <h2>Pedido atual</h2>
+                <p id="currentOrderId">Nenhum pedido aberto</p>
+              </div>
+            </div>
+
+            <div class="order-customer-box">
+              <label>
+                Cliente
+                <select id="orderClientSelect">
+                  <option value="">Consumidor Final</option>
+                </select>
+              </label>
+
+              <button id="btnCreateOrder" class="btn btn-primary full" type="button">
+                Novo pedido
+              </button>
+            </div>
+
+            <div id="currentOrderItems" class="order-items">
+              <div class="empty-state">Nenhum item no pedido.</div>
+            </div>
+
+            <div class="order-totals">
+              <div>
+                <span>Subtotal</span>
+                <strong id="orderSubtotal">R$ 0,00</strong>
+              </div>
+
+              <label>
+                Desconto
+                <input id="orderDiscountInput" type="number" min="0" step="0.01" value="0" />
+              </label>
+
+              <div class="order-total-final">
+                <span>Total</span>
+                <strong id="orderTotal">R$ 0,00</strong>
+              </div>
+            </div>
+
+            <div class="payment-box">
+              <label>
+                Forma de pagamento
+                <select id="paymentMethodSelect">
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="pix">Pix</option>
+                  <option value="debito">Débito</option>
+                  <option value="credito">Crédito</option>
+                  <option value="outros">Outros</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="order-actions">
+              <button id="btnSaveOpenOrder" class="btn btn-secondary" type="button">
+                Salvar em aberto
+              </button>
+
+              <button id="btnFinishOrder" class="btn btn-primary" type="button">
+                Finalizar venda
+              </button>
+
+              <button id="btnCancelOrder" class="btn btn-danger" type="button">
+                Eliminar pedido
+              </button>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="view-produtos" class="view">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Produtos</h2>
+              <p>Cadastro, estoque, código de barras, preço de custo e preço de venda.</p>
+            </div>
+
+            <div class="header-actions">
+              <input id="productsSearch" class="inline-search" type="search" placeholder="Pesquisar produto..." />
+              <button id="btnNewProduct" class="btn btn-primary" type="button">Novo produto</button>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Categoria</th>
+                  <th>Código</th>
+                  <th>Qtd.</th>
+                  <th>Mín.</th>
+                  <th>Custo</th>
+                  <th>Venda</th>
+                  <th>Status</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+
+              <tbody id="productsTableBody">
+                <tr>
+                  <td colspan="9" class="empty-state">Carregando produtos...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="view-cadastromassa" class="view">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Cadastro de produtos em massa</h2>
+              <p>Escaneie o código de barras de cada produto pra cadastrar rapidinho, um atrás do outro.</p>
+            </div>
+
+            <div class="operator-chip">
+              <span>Cadastrados nesta sessão</span>
+              <strong id="bulkSessionCount">0</strong>
+            </div>
+          </div>
+
+          <div class="barcode-box">
+            <label for="bulkScanInput">Leitor de código de barras</label>
+            <input
+              id="bulkScanInput"
+              class="barcode-input"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              placeholder="Escaneie o código de barras aqui"
+            />
+            <small>Produto novo abre o formulário rápido abaixo. Produto já cadastrado só mostra um aviso.</small>
+          </div>
+
+          <div id="bulkExistingNotice" class="feedback hidden"></div>
+
+          <form id="bulkProductForm" class="form modal-form hidden">
+            <div class="form-grid">
+              <label>
+                Código
+                <input id="bulkProductCode" type="text" readonly />
+              </label>
+
+              <label>
+                Categoria
+                <input id="bulkProductCategory" type="text" list="categorySuggestions" required />
+              </label>
+
+              <label>
+                Nome
+                <input id="bulkProductName" type="text" required />
+              </label>
+
+              <label>
+                Variante
+                <input id="bulkProductVariant" type="text" placeholder="Ex: 350ml, unidade, pacote..." />
+              </label>
+
+              <label>
+                Quantidade
+                <input id="bulkProductQuantity" type="number" min="0" step="1" value="1" required />
+              </label>
+
+              <label>
+                Estoque mínimo
+                <input id="bulkProductMinimum" type="number" min="0" step="1" value="0" required />
+              </label>
+
+              <label>
+                Custo
+                <input id="bulkProductCost" type="number" min="0" step="0.01" value="0" />
+              </label>
+
+              <label>
+                Venda
+                <input id="bulkProductSalePrice" type="number" min="0" step="0.01" value="0" />
+              </label>
+            </div>
+
+            <div class="modal-actions">
+              <button id="btnCancelBulkProduct" class="btn btn-secondary" type="button">
+                Cancelar
+              </button>
+
+              <button class="btn btn-primary" type="submit">
+                Salvar e continuar escaneando
+              </button>
+            </div>
+          </form>
+
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Código</th>
+                  <th>Qtd.</th>
+                  <th>Venda</th>
+                </tr>
+              </thead>
+
+              <tbody id="bulkSessionTableBody">
+                <tr>
+                  <td colspan="4" class="empty-state">Nenhum produto cadastrado nesta sessão ainda.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="modal-actions" style="margin-top: 16px;">
+            <button id="btnFinishBulkSession" class="btn btn-primary" type="button">
+              Encerrar e voltar para Produtos
+            </button>
+          </div>
+        </section>
+      </section>
+
+      <section id="view-fornecedores" class="view">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Fornecedores</h2>
+              <p>Cadastro de fornecedores usados nas entradas de estoque.</p>
+            </div>
+
+            <div class="header-actions">
+              <input id="suppliersSearch" class="inline-search" type="search" placeholder="Pesquisar fornecedor..." />
+              <button id="btnNewSupplier" class="btn btn-primary" type="button">Novo fornecedor</button>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>CNPJ</th>
+                  <th>Telefone</th>
+                  <th>E-mail</th>
+                  <th>Observação</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+
+              <tbody id="suppliersTableBody">
+                <tr>
+                  <td colspan="6" class="empty-state">Carregando fornecedores...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="view-entradaestoque" class="view">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Entrada de estoque</h2>
+              <p>Lance a nota de compra do fornecedor: soma no estoque e atualiza o custo do produto.</p>
+            </div>
+          </div>
+
+          <form id="stockEntryHeaderForm" class="form form-grid">
+            <label>
+              Fornecedor
+              <select id="stockEntrySupplier">
+                <option value="">Sem fornecedor / avulso</option>
+              </select>
+            </label>
+
+            <label>
+              Nº da nota
+              <input id="stockEntryInvoice" type="text" placeholder="Opcional" />
+            </label>
+
+            <label class="full-field">
+              Observação
+              <input id="stockEntryObservation" type="text" placeholder="Opcional" />
+            </label>
+          </form>
+
+          <div class="panel-header compact">
+            <div>
+              <h3>Itens da entrada</h3>
+            </div>
+          </div>
+
+          <form id="stockEntryItemForm" class="form form-grid">
+            <label>
+              Produto
+              <select id="stockEntryProduct"></select>
+            </label>
+
+            <label>
+              Quantidade
+              <input id="stockEntryQuantity" type="number" min="0.01" step="1" value="1" />
+            </label>
+
+            <label>
+              Custo unitário
+              <input id="stockEntryCost" type="number" min="0" step="0.01" value="0" />
+            </label>
+
+            <button id="btnAddStockEntryItem" class="btn btn-secondary" type="submit">
+              + Adicionar item
+            </button>
+          </form>
+
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Quantidade</th>
+                  <th>Custo unitário</th>
+                  <th>Subtotal</th>
+                  <th></th>
+                </tr>
+              </thead>
+
+              <tbody id="stockEntryItemsTableBody">
+                <tr>
+                  <td colspan="5" class="empty-state">Nenhum item adicionado ainda.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="modal-actions" style="margin-top: 16px; justify-content: space-between;">
+            <strong id="stockEntryTotal">Total: R$ 0,00</strong>
+            <button id="btnRegisterStockEntry" class="btn btn-primary" type="button">
+              Registrar entrada
+            </button>
+          </div>
+        </section>
+
+        <section class="panel margin-top">
+          <div class="panel-header">
+            <div>
+              <h2>Entradas recentes</h2>
+            </div>
+
+            <button id="btnRefreshStockEntries" class="btn btn-secondary" type="button">Atualizar</button>
+          </div>
+
+          <div id="stockEntriesList" class="cards-list">
+            <div class="empty-state">Nenhuma entrada registrada ainda.</div>
+          </div>
+        </section>
+      </section>
+
+      <section id="view-clientes" class="view">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Clientes</h2>
+              <p>Cadastro simples de clientes. Venda rápida pode usar Consumidor Final.</p>
+            </div>
+
+            <div class="header-actions">
+              <input id="clientsSearch" class="inline-search" type="search" placeholder="Pesquisar cliente..." />
+              <button id="btnNewClient" class="btn btn-primary" type="button">Novo cliente</button>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Telefone</th>
+                  <th>E-mail</th>
+                  <th>Observação</th>
+                  <th>Criado em</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+
+              <tbody id="clientsTableBody">
+                <tr>
+                  <td colspan="6" class="empty-state">Carregando clientes...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section id="view-pedidos" class="view">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Pedidos em aberto</h2>
+              <p>Pedidos salvos que ainda não foram finalizados. Cancelamento exige PIN de administrador.</p>
+            </div>
+
+            <button id="btnRefreshOpenOrders" class="btn btn-secondary" type="button">
+              Atualizar pedidos
+            </button>
+          </div>
+
+          <div id="openOrdersList" class="cards-list">
+            <div class="empty-state">Carregando pedidos em aberto...</div>
+          </div>
+        </section>
+      </section>
+
+      <section id="view-devolucoes" class="view">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Devoluções e trocas</h2>
+              <p>Busque a venda pelo nº do pedido. Devolução estorna o valor do relatório; troca só repõe o estoque. Exige PIN de administrador.</p>
+            </div>
+
+            <div class="search-box">
+              <input id="returnOrderSearch" type="text" placeholder="Nº do pedido (ex: PED-XXXXXXXX)" autocomplete="off" />
+              <button id="btnSearchReturnOrder" class="btn btn-secondary" type="button">Buscar</button>
+            </div>
+          </div>
+
+          <div id="returnOrderResult" class="cards-list">
+            <div class="empty-state">Busque um pedido pelo número para ver os itens da venda.</div>
+          </div>
+        </section>
+
+        <section class="panel margin-top">
+          <div class="panel-header">
+            <div>
+              <h2>Devoluções recentes</h2>
+              <p>Registradas hoje.</p>
+            </div>
+
+            <button id="btnRefreshReturns" class="btn btn-secondary" type="button">Atualizar</button>
+          </div>
+
+          <div id="returnsList" class="cards-list">
+            <div class="empty-state">Nenhuma devolução registrada hoje.</div>
+          </div>
+        </section>
+      </section>
+
+      <section id="view-caixa" class="view">
+        <div class="two-columns">
+          <section class="panel">
+            <div class="panel-header compact">
+              <div>
+                <h2>Abertura de caixa</h2>
+                <p>Abra o caixa antes de iniciar as vendas do dia.</p>
+              </div>
+            </div>
+
+            <form id="openCashForm" class="form">
+              <label>
+                Data
+                <input id="cashOpenDate" type="date" required />
+              </label>
+
+              <label>
+                Operador
+                <input id="cashOperator" type="text" placeholder="Operador logado" readonly />
+              </label>
+
+              <label>
+                Saldo inicial
+                <input id="cashInitialBalance" type="number" min="0" step="0.01" value="0" />
+              </label>
+
+              <label>
+                Observação
+                <input id="cashOpenObservation" type="text" placeholder="Opcional" />
+              </label>
+
+              <button class="btn btn-primary full" type="submit">
+                Abrir caixa
+              </button>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header compact">
+              <div>
+                <h2>Fechamento de caixa</h2>
+                <p>Fechamento exige PIN de administrador.</p>
+              </div>
+            </div>
+
+            <div class="cash-summary">
+              <div><span>Dinheiro</span><strong id="cashMoney">R$ 0,00</strong></div>
+              <div><span>Pix</span><strong id="cashPix">R$ 0,00</strong></div>
+              <div><span>Débito</span><strong id="cashDebit">R$ 0,00</strong></div>
+              <div><span>Crédito</span><strong id="cashCredit">R$ 0,00</strong></div>
+              <div><span>Outros</span><strong id="cashOther">R$ 0,00</strong></div>
+              <div><span>Total vendas</span><strong id="cashSalesTotal">R$ 0,00</strong></div>
+            </div>
+
+            <form id="closeCashForm" class="form">
+              <label>
+                Data
+                <input id="cashCloseDate" type="date" required />
+              </label>
+
+              <label>
+                Sangrias
+                <input id="cashWithdrawals" type="number" min="0" step="0.01" value="0" />
+              </label>
+
+              <label>
+                Despesas
+                <input id="cashExpenses" type="number" min="0" step="0.01" value="0" />
+              </label>
+
+              <label>
+                Saldo informado
+                <input id="cashReportedBalance" type="number" min="0" step="0.01" value="0" />
+              </label>
+
+              <label>
+                Observação
+                <input id="cashCloseObservation" type="text" placeholder="Opcional" />
+              </label>
+
+              <button class="btn btn-primary full" type="submit">
+                Fechar caixa
+              </button>
+
+              <button id="btnPdfDaily" class="btn btn-secondary full" type="button">
+                Baixar PDF fechamento diário
+              </button>
+            </form>
+          </section>
+        </div>
+
+        <section class="panel margin-top">
+          <div class="panel-header compact">
+            <div>
+              <h2>Movimentações do caixa</h2>
+              <p>Sangria e despesa exigem caixa aberto; sangria também exige PIN de administrador.</p>
+            </div>
+          </div>
+
+          <form id="cashMovementForm" class="form form-grid">
+            <label>
+              Tipo
+              <select id="cashMovementType">
+                <option value="suprimento">Suprimento (entrada)</option>
+                <option value="sangria">Sangria (retirada)</option>
+                <option value="despesa">Despesa</option>
+              </select>
+            </label>
+
+            <label>
+              Valor
+              <input id="cashMovementValue" type="number" min="0.01" step="0.01" required />
+            </label>
+
+            <label class="full-field">
+              Motivo
+              <input id="cashMovementReason" type="text" placeholder="Opcional" />
+            </label>
+
+            <button id="btnRegisterCashMovement" class="btn btn-primary" type="submit">
+              Registrar movimentação
+            </button>
+          </form>
+
+          <div id="cashMovementsList" class="cards-list">
+            <div class="empty-state">Nenhuma movimentação registrada hoje.</div>
+          </div>
+        </section>
+      </section>
+
+      <section id="view-relatorios" class="view">
+        <section class="dashboard-grid">
+          <article class="metric-card">
+            <span>Vendido no período</span>
+            <strong id="reportRevenue">R$ 0,00</strong>
+          </article>
+
+          <article class="metric-card">
+            <span>Custo</span>
+            <strong id="reportCost">R$ 0,00</strong>
+          </article>
+
+          <article class="metric-card">
+            <span>Lucro bruto</span>
+            <strong id="reportProfit">R$ 0,00</strong>
+          </article>
+
+          <article class="metric-card">
+            <span>Ticket médio</span>
+            <strong id="reportAverageTicket">R$ 0,00</strong>
+          </article>
+
+          <article class="metric-card">
+            <span>DAS estimado</span>
+            <strong id="reportDas">R$ 0,00</strong>
+          </article>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Relatórios</h2>
+              <p>Consulte venda diária, mensal, anual, lucro bruto e base gerencial para contabilidade.</p>
+            </div>
+
+            <div class="report-controls">
+              <label>
+                Dia
+                <input id="dailyReportDate" type="date" />
+              </label>
+
+              <button id="btnDailyReport" class="btn btn-secondary" type="button">
+                Diário
+              </button>
+
+              <label>
+                Mês
+                <input id="monthlyReportInput" type="month" />
+              </label>
+
+              <button id="btnMonthlyReport" class="btn btn-secondary" type="button">
+                Mensal
+              </button>
+
+              <button id="btnPdfMonthly" class="btn btn-primary" type="button">
+                Baixar PDF mensal contabilidade
+              </button>
+
+              <label>
+                Ano
+                <input id="annualReportYear" type="number" min="2020" max="2100" />
+              </label>
+
+              <button id="btnAnnualReport" class="btn btn-secondary" type="button">
+                Anual / DAS
+              </button>
+            </div>
+          </div>
+
+          <div class="report-layout">
+            <div class="chart-box">
+              <h3>Formas de pagamento</h3>
+              <canvas id="paymentChart"></canvas>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Data/Hora</th>
+                    <th>Pedido</th>
+                    <th>Cliente</th>
+                    <th>Operador</th>
+                    <th>Pagamento</th>
+                    <th>Total</th>
+                    <th>Custo</th>
+                    <th>Lucro</th>
+                  </tr>
+                </thead>
+
+                <tbody id="salesReportTableBody">
+                  <tr>
+                    <td colspan="8" class="empty-state">Nenhum relatório carregado.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel margin-top">
+          <div class="panel-header">
+            <div>
+              <h2>PDFs gerados</h2>
+              <p>Relatórios mensais e fechamentos diários já gerados pelo sistema.</p>
+            </div>
+
+            <button id="btnLoadPdfReports" class="btn btn-secondary" type="button">
+              Atualizar PDFs
+            </button>
+          </div>
+
+          <div id="pdfReportsList" class="cards-list">
+            <div class="empty-state">Nenhum PDF carregado.</div>
+          </div>
+        </section>
+      </section>
+
+      <section id="view-diagnostico" class="view">
+        <div class="two-columns">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Diagnóstico do sistema</h2>
+                <p>Verifique API, planilha, abas, cabeçalhos e alertas.</p>
+              </div>
+
+              <button id="btnRunHealth" class="btn btn-primary" type="button">
+                Rodar diagnóstico
+              </button>
+            </div>
+
+            <div id="healthResult" class="diagnostic-box">
+              <div class="empty-state">Nenhum diagnóstico executado.</div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Últimos erros/logs</h2>
+                <p>Registros para suporte e manutenção.</p>
+              </div>
+
+              <button id="btnLoadLogs" class="btn btn-secondary" type="button">
+                Carregar logs
+              </button>
+            </div>
+
+            <div id="logsList" class="logs-list">
+              <div class="empty-state">Nenhum log carregado.</div>
+            </div>
+          </section>
+        </div>
+
+        <section class="panel margin-top">
+          <div class="panel-header">
+            <div>
+              <h2>Backup da planilha</h2>
+              <p>Backup automático diário e backup manual da base de dados.</p>
+            </div>
+
+            <div class="header-actions">
+              <button id="btnBackupManual" class="btn btn-primary" type="button">
+                Fazer backup manual
+              </button>
+
+              <button id="btnLoadBackups" class="btn btn-secondary" type="button">
+                Listar backups
+              </button>
+            </div>
+          </div>
+
+          <div id="backupsList" class="cards-list">
+            <div class="empty-state">Nenhum backup carregado.</div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      Desenvolvido por Fractaflow.pro
+    </footer>
+  </div>
+
+  <div id="loginModal" class="modal-overlay login-overlay" role="dialog" aria-modal="true">
+    <div class="modal login-modal">
+      <div class="modal-header">
+        <div>
+          <h2>Entrar no Reload PDV</h2>
+          <p>Informe o PIN do operador para acessar o sistema.</p>
+        </div>
+      </div>
+
+      <form id="loginForm" class="form modal-form">
+        <label>
+          PIN do operador
+          <input
+            id="operatorPinInput"
+            type="password"
+            inputmode="numeric"
+            autocomplete="off"
+            placeholder="Digite o PIN"
+            required
+          />
+        </label>
+
+        <button id="btnLogin" class="btn btn-primary full" type="submit">
+          Entrar
+        </button>
+
+        <div id="loginFeedback" class="feedback hidden"></div>
+
+        <div id="loginNetworkAddress" class="feedback info hidden"></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="adminPinModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal admin-pin-modal">
+      <div class="modal-header">
+        <div>
+          <h2 id="adminPinTitle">Confirmação de administrador</h2>
+          <p id="adminPinDescription">Informe o PIN de administrador para continuar.</p>
+        </div>
+
+        <button id="btnCloseAdminPinModal" class="icon-button" type="button">×</button>
+      </div>
+
+      <form id="adminPinForm" class="form modal-form">
+        <label>
+          PIN de administrador
+          <input
+            id="adminPinInput"
+            type="password"
+            inputmode="numeric"
+            autocomplete="off"
+            placeholder="PIN admin"
+            required
+          />
+        </label>
+
+        <div id="adminPinFeedback" class="feedback hidden"></div>
+
+        <div class="modal-actions">
+          <button id="btnCancelAdminPinModal" class="btn btn-secondary" type="button">
+            Cancelar
+          </button>
+
+          <button id="btnConfirmAdminPin" class="btn btn-primary" type="submit">
+            Confirmar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="productModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <h2 id="productModalTitle">Novo produto</h2>
+          <p>Cadastre ou edite produtos do estoque.</p>
+        </div>
+
+        <button id="btnCloseProductModal" class="icon-button" type="button">×</button>
+      </div>
+
+      <form id="productForm" class="form modal-form">
+        <input id="productId" type="hidden" />
+
+        <div class="form-grid">
+          <label>
+            Categoria
+            <input id="productCategory" type="text" list="categorySuggestions" required />
+          </label>
+
+          <label>
+            Nome
+            <input id="productName" type="text" required />
+          </label>
+
+          <label>
+            Variante
+            <input id="productVariant" type="text" placeholder="Ex: 350ml, unidade, pacote..." />
+          </label>
+
+          <label>
+            Código / código de barras
+            <input id="productCode" type="text" />
+          </label>
+
+          <label>
+            Quantidade
+            <input id="productQuantity" type="number" min="0" step="1" required />
+          </label>
+
+          <label>
+            Estoque mínimo
+            <input id="productMinimum" type="number" min="0" step="1" required />
+          </label>
+
+          <label>
+            Custo
+            <input id="productCost" type="number" min="0" step="0.01" />
+          </label>
+
+          <label>
+            Venda
+            <input id="productSalePrice" type="number" min="0" step="0.01" />
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button id="btnCancelProductModal" class="btn btn-secondary" type="button">
+            Cancelar
+          </button>
+
+          <button id="btnSaveProduct" class="btn btn-primary" type="submit">
+            Salvar produto
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="clientModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <h2 id="clientModalTitle">Novo cliente</h2>
+          <p>Cadastro simples para pedidos e histórico.</p>
+        </div>
+
+        <button id="btnCloseClientModal" class="icon-button" type="button">×</button>
+      </div>
+
+      <form id="clientForm" class="form modal-form">
+        <input id="clientId" type="hidden" />
+
+        <div class="form-grid">
+          <label>
+            Nome
+            <input id="clientName" type="text" required />
+          </label>
+
+          <label>
+            Telefone
+            <input id="clientPhone" type="text" />
+          </label>
+
+          <label>
+            E-mail
+            <input id="clientEmail" type="email" />
+          </label>
+
+          <label class="full-field">
+            Observação
+            <input id="clientObservation" type="text" />
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button id="btnCancelClientModal" class="btn btn-secondary" type="button">
+            Cancelar
+          </button>
+
+          <button id="btnSaveClient" class="btn btn-primary" type="submit">
+            Salvar cliente
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="supplierModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <h2 id="supplierModalTitle">Novo fornecedor</h2>
+          <p>Cadastro usado nas entradas de estoque.</p>
+        </div>
+
+        <button id="btnCloseSupplierModal" class="icon-button" type="button">×</button>
+      </div>
+
+      <form id="supplierForm" class="form modal-form">
+        <input id="supplierId" type="hidden" />
+
+        <div class="form-grid">
+          <label>
+            Nome
+            <input id="supplierName" type="text" required />
+          </label>
+
+          <label>
+            CNPJ
+            <input id="supplierCnpj" type="text" placeholder="Opcional" />
+          </label>
+
+          <label>
+            Telefone
+            <input id="supplierPhone" type="text" />
+          </label>
+
+          <label>
+            E-mail
+            <input id="supplierEmail" type="email" />
+          </label>
+
+          <label class="full-field">
+            Observação
+            <input id="supplierObservation" type="text" />
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button id="btnCancelSupplierModal" class="btn btn-secondary" type="button">
+            Cancelar
+          </button>
+
+          <button id="btnSaveSupplier" class="btn btn-primary" type="submit">
+            Salvar fornecedor
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <datalist id="categorySuggestions">
+    <option value="Bebidas"></option>
+    <option value="Salgados"></option>
+    <option value="Doces"></option>
+    <option value="Bomboniere"></option>
+    <option value="Higiene"></option>
+    <option value="Mercearia"></option>
+    <option value="Outros"></option>
+  </datalist>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
