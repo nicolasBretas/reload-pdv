@@ -206,6 +206,8 @@ function addColumnIfMissing(sql) {
 function migrate() {
   addColumnIfMissing('ALTER TABLE order_items ADD COLUMN desconto REAL NOT NULL DEFAULT 0');
   addColumnIfMissing('ALTER TABLE returns ADD COLUMN custoUnitario REAL NOT NULL DEFAULT 0');
+  addColumnIfMissing('ALTER TABLE sales ADD COLUMN valorRecebido REAL');
+  addColumnIfMissing('ALTER TABLE sales ADD COLUMN troco REAL NOT NULL DEFAULT 0');
 }
 
 migrate();

@@ -1215,3 +1215,88 @@ select:focus {
     flex-direction: column;
   }
 }
+/* Finalizar venda / troco */
+
+.checkout-modal {
+  width: min(480px, 100%);
+}
+
+.checkout-total,
+.checkout-change {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.checkout-total span,
+.checkout-change span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.checkout-total strong {
+  font-size: 1.8rem;
+  color: var(--text);
+}
+
+.checkout-methods,
+.checkout-quick-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.checkout-methods .chip {
+  min-height: 42px;
+  padding: 0 16px;
+  font-size: 0.98rem;
+}
+
+.checkout-cash {
+  display: grid;
+  gap: 12px;
+}
+
+.form .checkout-received-input {
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+
+.checkout-change {
+  border-color: rgba(63, 185, 80, 0.32);
+  background: var(--success-soft);
+}
+
+.checkout-change strong {
+  font-size: 2rem;
+  color: var(--success);
+}
+
+.checkout-change.is-missing {
+  border-color: rgba(248, 81, 73, 0.32);
+  background: var(--danger-soft);
+}
+
+.checkout-change.is-missing strong {
+  color: var(--danger);
+}
+
+/* Clique no cliente / pedido abre a conta */
+
+.clickable-row,
+.clickable-card {
+  cursor: pointer;
+}
+
+.clickable-card:hover {
+  border-color: var(--accent-light);
+}
+
+.clickable-row .status-badge {
+  margin-top: 6px;
+}

@@ -963,6 +963,61 @@
     </div>
   </div>
 
+  <div id="checkoutModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal checkout-modal">
+      <div class="modal-header">
+        <div>
+          <h2>Finalizar venda</h2>
+          <p id="checkoutClient">Consumidor Final</p>
+        </div>
+
+        <button id="btnCloseCheckoutModal" class="icon-button" type="button">×</button>
+      </div>
+
+      <form id="checkoutForm" class="form modal-form">
+        <div class="checkout-total">
+          <span>Total a pagar</span>
+          <strong id="checkoutTotal">R$ 0,00</strong>
+        </div>
+
+        <div class="checkout-methods" id="checkoutMethods"></div>
+
+        <div id="checkoutCashBox" class="checkout-cash">
+          <label>
+            Valor recebido
+            <input
+              id="checkoutReceivedInput"
+              class="checkout-received-input"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="0,00"
+            />
+          </label>
+
+          <div id="checkoutQuickValues" class="checkout-quick-values"></div>
+
+          <div id="checkoutChangeBox" class="checkout-change">
+            <span id="checkoutChangeLabel">Troco</span>
+            <strong id="checkoutChange">R$ 0,00</strong>
+          </div>
+        </div>
+
+        <div id="checkoutFeedback" class="feedback hidden"></div>
+
+        <div class="modal-actions">
+          <button id="btnCancelCheckout" class="btn btn-secondary" type="button">
+            Voltar
+          </button>
+
+          <button id="btnConfirmCheckout" class="btn btn-primary" type="submit">
+            Confirmar venda
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div id="productModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modal-header">

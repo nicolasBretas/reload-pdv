@@ -213,7 +213,7 @@ function cancelarPedido({ pedidoId, adminPin, observacao }) {
   return { id: pedidoId };
 }
 
-function finalizarPedido({ pedidoId, formaPagamento, desconto, requestId, operadorNome }) {
+function finalizarPedido({ pedidoId, formaPagamento, desconto, valorRecebido, requestId, operadorNome }) {
   if (requestId) {
     const existingSale = db.prepare('SELECT * FROM sales WHERE requestId = ?').get(requestId);
 
@@ -223,7 +223,8 @@ function finalizarPedido({ pedidoId, formaPagamento, desconto, requestId, operad
         venda: {
           id: existingSale.id,
           pedidoId: existingSale.pedidoId,
-          total: Number(existingSale.total)
+          total: Number(existingSale.total),
+          troco: Number(existingSale.troco || 0)
         }
       };
     }
@@ -240,6 +241,23 @@ function finalizarPedido({ pedidoId, formaPagamento, desconto, requestId, operad
   const subtotal = Number(order.subtotal);
   const total = Math.max(0, subtotal - descontoValue);
 
+  let recebido = null;
+  let troco = 0;
+
+  if (formaPagamento === 'dinheiro' && valorRecebido !== undefined && valorRecebido !== null && valorRecebido !== '') {
+    recebido = Number(valorRecebido);
+
+    if (!Number.isFinite(recebido) || recebido < 0) {
+      throw new Error('Valor recebido inválido.');
+    }
+
+    if (recebido + 0.005 < total) {
+      throw new Error('Valor recebido é menor que o total da venda.');
+    }
+
+    troco = Math.round((recebido - total) * 100) / 100;
+  }
+
   let custoTotal = 0;
 
   for (const item of items) {
@@ -255,8 +273,8 @@ function finalizarPedido({ pedidoId, formaPagamento, desconto, requestId, operad
   const saleId = generateId('VENDA');
 
   db.prepare(
-    `INSERT INTO sales (id, pedidoId, clienteNome, operadorNome, formaPagamento, total, custoTotal, lucroBruto, dataHora, requestId)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO sales (id, pedidoId, clienteNome, operadorNome, formaPagamento, total, custoTotal, lucroBruto, dataHora, requestId, valorRecebido, troco)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     saleId,
     pedidoId,
@@ -267,7 +285,9 @@ function finalizarPedido({ pedidoId, formaPagamento, desconto, requestId, operad
     custoTotal,
     lucroBruto,
     now,
-    requestId || null
+    requestId || null,
+    recebido,
+    troco
   );
 
   db.prepare(
@@ -276,7 +296,7 @@ function finalizarPedido({ pedidoId, formaPagamento, desconto, requestId, operad
 
   return {
     duplicado: false,
-    venda: { id: saleId, pedidoId, total, custoTotal, lucroBruto, dataHora: now }
+    venda: { id: saleId, pedidoId, total, custoTotal, lucroBruto, dataHora: now, valorRecebido: recebido, troco }
   };
 }
 

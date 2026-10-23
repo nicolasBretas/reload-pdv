@@ -103,6 +103,22 @@ const App = (() => {
     els.btnFinishOrder = document.getElementById('btnFinishOrder');
     els.btnCancelOrder = document.getElementById('btnCancelOrder');
 
+    els.checkoutModal = document.getElementById('checkoutModal');
+    els.checkoutForm = document.getElementById('checkoutForm');
+    els.checkoutClient = document.getElementById('checkoutClient');
+    els.checkoutTotal = document.getElementById('checkoutTotal');
+    els.checkoutMethods = document.getElementById('checkoutMethods');
+    els.checkoutCashBox = document.getElementById('checkoutCashBox');
+    els.checkoutReceivedInput = document.getElementById('checkoutReceivedInput');
+    els.checkoutQuickValues = document.getElementById('checkoutQuickValues');
+    els.checkoutChangeBox = document.getElementById('checkoutChangeBox');
+    els.checkoutChangeLabel = document.getElementById('checkoutChangeLabel');
+    els.checkoutChange = document.getElementById('checkoutChange');
+    els.btnCloseCheckoutModal = document.getElementById('btnCloseCheckoutModal');
+    els.btnCancelCheckout = document.getElementById('btnCancelCheckout');
+    els.btnConfirmCheckout = document.getElementById('btnConfirmCheckout');
+    els.checkoutFeedback = document.getElementById('checkoutFeedback');
+
     els.productsSearch = document.getElementById('productsSearch');
     els.productsTableBody = document.getElementById('productsTableBody');
     els.btnNewProduct = document.getElementById('btnNewProduct');
@@ -288,6 +304,19 @@ const App = (() => {
     els.btnFinishOrder.addEventListener('click', finishCurrentOrder);
     els.btnCancelOrder.addEventListener('click', cancelCurrentOrder);
     els.orderDiscountInput.addEventListener('input', renderCurrentOrder);
+    els.orderClientSelect.addEventListener('change', handleOrderClientChange);
+
+    els.checkoutForm.addEventListener('submit', handleCheckoutSubmit);
+    els.btnCloseCheckoutModal.addEventListener('click', closeCheckoutModal);
+    els.btnCancelCheckout.addEventListener('click', closeCheckoutModal);
+    els.checkoutMethods.addEventListener('click', handleCheckoutMethodClick);
+    els.checkoutQuickValues.addEventListener('click', handleCheckoutQuickValueClick);
+    els.checkoutReceivedInput.addEventListener('input', renderCheckoutChange);
+    els.checkoutModal.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        closeCheckoutModal();
+      }
+    });
 
     els.productsSearch.addEventListener('input', renderProductsTable);
     els.btnNewProduct.addEventListener('click', () => openProductModal());
@@ -701,7 +730,7 @@ const App = (() => {
       fetchCashDay();
     }
 
-    if (viewName === 'pedidos') {
+    if (viewName === 'pedidos' || viewName === 'clientes') {
       fetchOpenOrders();
     }
 
@@ -923,10 +952,151 @@ const App = (() => {
       return;
     }
 
-    const confirmed = confirm(`Finalizar venda no valor de ${formatCurrency(calculateCurrentOrderTotal())}?`);
+    openCheckoutModal();
+  }
 
-    if (!confirmed) {
-      focusBarcodeInput();
+  // =============================
+  // FINALIZAR VENDA / TROCO
+  // =============================
+
+  function openCheckoutModal() {
+    const total = calculateCurrentOrderTotal();
+
+    state.checkoutRequestId = generateRequestId('VENDA');
+    state.checkoutMethod = els.paymentMethodSelect.value || CONFIG.DEFAULT_PAYMENT_METHOD;
+
+    els.checkoutClient.textContent = state.currentOrder.clienteNome || CONFIG.DEFAULT_CLIENT_NAME;
+    els.checkoutTotal.textContent = formatCurrency(total);
+    els.checkoutReceivedInput.value = '';
+    els.checkoutFeedback.classList.add('hidden');
+
+    els.checkoutQuickValues.innerHTML = [
+      `<button class="chip" type="button" data-quick-value="${total.toFixed(2)}">Exato</button>`,
+      ...getQuickCashValues(total).map(value => `
+        <button class="chip" type="button" data-quick-value="${value}">${formatCurrency(value)}</button>
+      `)
+    ].join('');
+
+    renderCheckoutMethods();
+    els.checkoutModal.classList.remove('hidden');
+    focusCheckoutField();
+  }
+
+  function closeCheckoutModal() {
+    if (state.isSubmitting) {
+      return;
+    }
+
+    els.checkoutModal.classList.add('hidden');
+    focusBarcodeInput();
+  }
+
+  function focusCheckoutField() {
+    setTimeout(() => {
+      if (state.checkoutMethod === 'dinheiro') {
+        els.checkoutReceivedInput.focus();
+      } else {
+        els.btnConfirmCheckout.focus();
+      }
+    }, 50);
+  }
+
+  // Notas que o cliente costuma entregar: arredonda o total para cima em cada nota.
+  function getQuickCashValues(total) {
+    const values = new Set();
+
+    [5, 10, 20, 50, 100, 200].forEach(note => {
+      const value = Math.ceil((total + 0.001) / note) * note;
+
+      if (value > total) {
+        values.add(value);
+      }
+    });
+
+    return [...values].sort((a, b) => a - b).slice(0, 4);
+  }
+
+  function renderCheckoutMethods() {
+    els.checkoutMethods.innerHTML = CONFIG.PAYMENT_METHODS.map(method => `
+      <button
+        class="chip ${method.value === state.checkoutMethod ? 'active' : ''}"
+        type="button"
+        data-checkout-method="${method.value}"
+      >${escapeHtml(method.label)}</button>
+    `).join('');
+
+    els.checkoutCashBox.classList.toggle('hidden', state.checkoutMethod !== 'dinheiro');
+    renderCheckoutChange();
+  }
+
+  function handleCheckoutMethodClick(event) {
+    const button = event.target.closest('[data-checkout-method]');
+
+    if (!button) {
+      return;
+    }
+
+    state.checkoutMethod = button.dataset.checkoutMethod;
+    els.paymentMethodSelect.value = state.checkoutMethod;
+    renderCheckoutMethods();
+    focusCheckoutField();
+  }
+
+  function handleCheckoutQuickValueClick(event) {
+    const button = event.target.closest('[data-quick-value]');
+
+    if (!button) {
+      return;
+    }
+
+    els.checkoutReceivedInput.value = Number(button.dataset.quickValue).toFixed(2).replace('.', ',');
+    renderCheckoutChange();
+    els.btnConfirmCheckout.focus();
+  }
+
+  function getCheckoutReceived() {
+    const raw = els.checkoutReceivedInput.value.trim();
+    return raw ? parseMoneyInput(raw) : null;
+  }
+
+  function renderCheckoutChange() {
+    const total = calculateCurrentOrderTotal();
+    const received = getCheckoutReceived();
+    const isCash = state.checkoutMethod === 'dinheiro';
+
+    els.checkoutChangeBox.classList.remove('is-missing');
+
+    if (!isCash || received === null) {
+      els.checkoutChangeLabel.textContent = 'Troco';
+      els.checkoutChange.textContent = formatCurrency(0);
+      return;
+    }
+
+    if (received + 0.005 < total) {
+      els.checkoutChangeBox.classList.add('is-missing');
+      els.checkoutChangeLabel.textContent = 'Falta';
+      els.checkoutChange.textContent = formatCurrency(total - received);
+      return;
+    }
+
+    els.checkoutChangeLabel.textContent = 'Troco';
+    els.checkoutChange.textContent = formatCurrency(received - total);
+  }
+
+  async function handleCheckoutSubmit(event) {
+    event.preventDefault();
+
+    if (state.isSubmitting || !state.currentOrder) {
+      return;
+    }
+
+    const total = calculateCurrentOrderTotal();
+    const isCash = state.checkoutMethod === 'dinheiro';
+    const received = isCash ? getCheckoutReceived() : null;
+
+    if (received !== null && received + 0.005 < total) {
+      showFeedback(`Valor recebido menor que o total. Falta ${formatCurrency(total - received)}.`, 'error');
+      els.checkoutReceivedInput.focus();
       return;
     }
 
@@ -934,26 +1104,25 @@ const App = (() => {
       const operatorPayload = getOperatorPayload();
 
       state.isSubmitting = true;
+      setButtonLoading(els.btnConfirmCheckout, true, 'Finalizando...');
       setButtonLoading(els.btnFinishOrder, true, 'Finalizando...');
-
-      const requestId = generateRequestId('VENDA');
 
       const result = await ReloadAPI.finalizarPedido({
         pedidoId: state.currentOrder.id,
-        formaPagamento: els.paymentMethodSelect.value || CONFIG.DEFAULT_PAYMENT_METHOD,
+        formaPagamento: state.checkoutMethod,
         desconto: parseMoneyInput(els.orderDiscountInput.value),
-        requestId,
+        valorRecebido: received,
+        requestId: state.checkoutRequestId,
         ...operatorPayload
       });
 
+      els.checkoutModal.classList.add('hidden');
+
       state.currentOrder = null;
       clearCurrentOrderId();
-
-      if (result.duplicado) {
-        showFeedback(`Venda já registrada anteriormente: ${formatCurrency(result.venda.total)}.`, 'info');
-      } else {
-        showFeedback(`Venda finalizada: ${formatCurrency(result.venda.total)}.`, 'success');
-      }
+      els.orderClientSelect.value = '';
+      els.orderDiscountInput.value = 0;
+      els.paymentMethodSelect.value = CONFIG.DEFAULT_PAYMENT_METHOD;
 
       if (CONFIG.FULL_SYNC_AFTER_SALE) {
         await fullSync();
@@ -961,13 +1130,26 @@ const App = (() => {
         await lightSync();
       }
 
+      // Depois da sincronização, para a mensagem dela não esconder o troco.
+      const troco = Number(result.venda.troco || 0);
+      const trocoTexto = troco > 0 ? ` Troco: ${formatCurrency(troco)}.` : '';
+
+      if (result.duplicado) {
+        showFeedback(`Venda já registrada anteriormente: ${formatCurrency(result.venda.total)}.${trocoTexto}`, 'info');
+      } else {
+        showFeedback(`Venda finalizada: ${formatCurrency(result.venda.total)}.${trocoTexto}`, 'success');
+      }
+
       renderCurrentOrder();
       focusBarcodeInput();
     } catch (error) {
       showFeedback(error.message, 'error');
+      els.checkoutFeedback.textContent = error.message;
+      els.checkoutFeedback.className = 'feedback error';
       logError('finishCurrentOrder', error);
     } finally {
       state.isSubmitting = false;
+      setButtonLoading(els.btnConfirmCheckout, false, 'Confirmar venda');
       setButtonLoading(els.btnFinishOrder, false, 'Finalizar venda');
     }
   }
@@ -1106,7 +1288,10 @@ const App = (() => {
 
   function renderCurrentOrder() {
     if (!state.currentOrder) {
-      els.currentOrderId.textContent = 'Nenhum pedido aberto';
+      const pendingClient = state.clients.find(item => item.id === els.orderClientSelect.value);
+      els.currentOrderId.textContent = pendingClient
+        ? `Conta de ${pendingClient.nome} • lance o primeiro produto`
+        : 'Nenhum pedido aberto';
       els.currentOrderItems.innerHTML = '<div class="empty-state">Nenhum item no pedido.</div>';
       els.orderSubtotal.textContent = formatCurrency(0);
       els.orderTotal.textContent = formatCurrency(0);
@@ -1119,6 +1304,7 @@ const App = (() => {
       : '';
 
     els.currentOrderId.textContent = `${state.currentOrder.id} • ${state.currentOrder.clienteNome}${operadorTexto}`;
+    els.orderClientSelect.value = state.currentOrder.clienteId || '';
 
     const items = state.currentOrder.itens || [];
 
@@ -1667,12 +1853,83 @@ const App = (() => {
 
 
   function renderClientSelect() {
+    const selected = els.orderClientSelect.value;
+
     els.orderClientSelect.innerHTML = `
       <option value="">${CONFIG.DEFAULT_CLIENT_NAME}</option>
       ${state.clients.map(client => `
         <option value="${client.id}">${escapeHtml(client.nome)}</option>
       `).join('')}
     `;
+
+    els.orderClientSelect.value = state.clients.some(client => client.id === selected) ? selected : '';
+  }
+
+  function findOpenOrderForClient(clientId) {
+    return state.openOrders.find(order => order.clienteId === clientId) || null;
+  }
+
+  // Abre a conta do cliente: retoma o pedido em aberto dele ou prepara um novo,
+  // que é criado assim que o primeiro produto for lançado.
+  async function openClientAccount(clientId) {
+    const client = state.clients.find(item => item.id === clientId);
+
+    if (!client) {
+      showFeedback('Cliente não encontrado.', 'error');
+      return;
+    }
+
+    await fetchOpenOrders();
+
+    const openOrder = findOpenOrderForClient(clientId);
+
+    if (openOrder) {
+      await openExistingOrder(openOrder.id);
+      showFeedback(`Conta de ${client.nome} aberta: ${formatCurrency(openOrder.total)}.`, 'success');
+      return;
+    }
+
+    state.currentOrder = null;
+    clearCurrentOrderId();
+    els.orderClientSelect.value = clientId;
+    els.orderDiscountInput.value = 0;
+
+    renderCurrentOrder();
+    switchView('pdv');
+    showFeedback(`Nova conta para ${client.nome}. Lance os produtos.`, 'success');
+  }
+
+  async function handleOrderClientChange() {
+    const clientId = els.orderClientSelect.value;
+    const current = state.currentOrder;
+    const currentClientId = current ? current.clienteId || '' : '';
+
+    if (current && currentClientId === clientId) {
+      return;
+    }
+
+    if (current && !currentClientId && current.itens && current.itens.length) {
+      const nome = clientId
+        ? (state.clients.find(item => item.id === clientId) || {}).nome
+        : CONFIG.DEFAULT_CLIENT_NAME;
+      const confirmed = confirm(`O pedido atual tem itens e vai ficar salvo em "Pedidos em aberto".\nAbrir a conta de ${nome}?`);
+
+      if (!confirmed) {
+        els.orderClientSelect.value = currentClientId;
+        return;
+      }
+    }
+
+    if (clientId) {
+      await openClientAccount(clientId);
+      return;
+    }
+
+    state.currentOrder = null;
+    clearCurrentOrderId();
+    els.orderDiscountInput.value = 0;
+    renderCurrentOrder();
+    focusBarcodeInput();
   }
 
   function renderClientsTable() {
@@ -1695,11 +1952,18 @@ const App = (() => {
       return;
     }
 
-    els.clientsTableBody.innerHTML = clients.map(client => `
-      <tr>
+    els.clientsTableBody.innerHTML = clients.map(client => {
+      const openOrder = findOpenOrderForClient(client.id);
+      const accountBadge = openOrder
+        ? `<span class="status-badge status-warning">Conta aberta • ${formatCurrency(openOrder.total)}</span>`
+        : '';
+
+      return `
+      <tr class="clickable-row" data-open-client-account="${client.id}" title="Clique para abrir a conta">
         <td>
           <span class="client-name">${escapeHtml(client.nome)}</span>
           <span class="client-id">${escapeHtml(client.id)}</span>
+          ${accountBadge}
         </td>
         <td>${escapeHtml(client.telefone || '--')}</td>
         <td>${escapeHtml(client.email || '--')}</td>
@@ -1707,12 +1971,14 @@ const App = (() => {
         <td>${formatDateTime(client.criadoEm)}</td>
         <td>
           <div class="table-actions">
+            <button class="btn btn-primary btn-small" type="button" data-open-client-account="${client.id}">Abrir conta</button>
             <button class="btn btn-secondary btn-small" type="button" data-edit-client="${client.id}">Editar</button>
             <button class="btn btn-danger btn-small" type="button" data-archive-client="${client.id}">Arquivar</button>
           </div>
         </td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
   }
 
   function openClientModal(client = null) {
@@ -2061,6 +2327,7 @@ const App = (() => {
     try {
       state.openOrders = await ReloadAPI.listarPedidosAbertos();
       renderOpenOrders();
+      renderClientsTable();
     } catch (error) {
       showFeedback(error.message, 'error');
       logError('fetchOpenOrders', error);
@@ -2074,7 +2341,7 @@ const App = (() => {
     }
 
     els.openOrdersList.innerHTML = state.openOrders.map(order => `
-      <article class="order-card">
+      <article class="order-card clickable-card" data-open-order="${order.id}" title="Clique para abrir no PDV">
         <div class="order-card-header">
           <div>
             <strong>${escapeHtml(order.id)} • ${escapeHtml(order.clienteNome)}</strong>
@@ -2866,6 +3133,12 @@ const App = (() => {
       return;
     }
 
+    const clientAccountRow = event.target.closest('[data-open-client-account]');
+    if (clientAccountRow) {
+      openClientAccount(clientAccountRow.dataset.openClientAccount);
+      return;
+    }
+
     const editSupplierButton = event.target.closest('[data-edit-supplier]');
     if (editSupplierButton) {
       const supplier = state.suppliers.find(item => item.id === editSupplierButton.dataset.editSupplier);
@@ -2885,15 +3158,15 @@ const App = (() => {
       return;
     }
 
-    const openOrderButton = event.target.closest('[data-open-order]');
-    if (openOrderButton) {
-      openExistingOrder(openOrderButton.dataset.openOrder);
-      return;
-    }
-
     const cancelOpenOrderButton = event.target.closest('[data-cancel-open-order]');
     if (cancelOpenOrderButton) {
       cancelOpenOrder(cancelOpenOrderButton.dataset.cancelOpenOrder);
+      return;
+    }
+
+    const openOrderButton = event.target.closest('[data-open-order]');
+    if (openOrderButton) {
+      openExistingOrder(openOrderButton.dataset.openOrder);
       return;
     }
 
