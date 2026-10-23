@@ -48,6 +48,7 @@ const ACTIONS = {
   aplicarDescontoItem: orders.aplicarDescontoItem,
   removerItemPedido: orders.removerItemPedido,
   cancelarPedido: orders.cancelarPedido,
+  fecharComandaVazia: orders.fecharComandaVazia,
   finalizarPedido: orders.finalizarPedido,
 
   abrirCaixa: cash.abrirCaixa,

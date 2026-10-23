@@ -229,6 +229,11 @@ const ReloadAPI = (() => {
     return response.data;
   }
 
+  async function fecharComandaVazia(payload) {
+    const response = await requestPost('fecharComandaVazia', payload);
+    return response.data;
+  }
+
   async function cancelarPedido(pedidoId, adminPin, observacao = '') {
     const response = await requestPost('cancelarPedido', {
       pedidoId,
@@ -356,6 +361,7 @@ const ReloadAPI = (() => {
     aplicarDescontoItem,
     removerItemPedido,
     cancelarPedido,
+    fecharComandaVazia,
     finalizarPedido,
 
     abrirCaixa,
@@ -388,4 +394,4 @@ const ReloadAPI = (() => {
     registrarEntradaEstoque,
     listarEntradasEstoque
   };
-})();
+})();

@@ -65,6 +65,15 @@ function criarPedido({ clienteId, clienteNome, operadorId, operadorNome }) {
     }
 
     resolvedClienteNome = client.nome;
+
+    // Uma comanda aberta por cliente: se já existe, devolve a mesma.
+    const existing = db
+      .prepare("SELECT id FROM orders WHERE clienteId = ? AND status = 'aberto' ORDER BY dataHoraAbertura DESC LIMIT 1")
+      .get(clienteId);
+
+    if (existing) {
+      return { ...buildOrder(existing.id), existente: true };
+    }
   }
 
   const id = generateId('PED');
@@ -213,6 +222,24 @@ function cancelarPedido({ pedidoId, adminPin, observacao }) {
   return { id: pedidoId };
 }
 
+function fecharComandaVazia({ pedidoId, operadorNome }) {
+  requireOpenOrder(pedidoId);
+
+  const { quantidade } = db
+    .prepare('SELECT COUNT(*) AS quantidade FROM order_items WHERE pedidoId = ?')
+    .get(pedidoId);
+
+  if (quantidade > 0) {
+    throw new Error('A comanda tem itens. Finalize a venda ou cancele com PIN de administrador.');
+  }
+
+  db.prepare(
+    "UPDATE orders SET status = 'cancelado', dataHoraFechamento = ?, observacaoFechamento = ? WHERE id = ?"
+  ).run(new Date().toISOString(), `Comanda vazia fechada${operadorNome ? ` por ${operadorNome}` : ''}.`, pedidoId);
+
+  return { id: pedidoId };
+}
+
 function finalizarPedido({ pedidoId, formaPagamento, desconto, valorRecebido, requestId, operadorNome }) {
   if (requestId) {
     const existingSale = db.prepare('SELECT * FROM sales WHERE requestId = ?').get(requestId);
@@ -308,5 +335,6 @@ module.exports = {
   aplicarDescontoItem,
   removerItemPedido,
   cancelarPedido,
+  fecharComandaVazia,
   finalizarPedido
 };

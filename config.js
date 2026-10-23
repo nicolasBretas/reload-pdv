@@ -2,7 +2,7 @@ const CONFIG = {
   APP_NAME: 'Reload PDV',
   EMPRESA_ID: 'reload',
   EMPRESA_NOME: 'Reload',
-  SYSTEM_VERSION: '1.2.0',
+  SYSTEM_VERSION: '1.3.0',
 
     API_URL: `${window.location.protocol}//${window.location.hostname}:3100/exec`,
 

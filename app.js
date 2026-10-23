@@ -790,7 +790,13 @@ const App = (() => {
       await fetchOpenOrders();
 
       renderCurrentOrder();
-      showFeedback('Novo pedido criado.', 'success');
+
+      if (order.existente) {
+        showFeedback(`${order.clienteNome} já tem uma comanda aberta. Ela foi reaberta.`, 'info');
+      } else {
+        showFeedback('Novo pedido criado.', 'success');
+      }
+
       focusBarcodeInput();
     } catch (error) {
       showFeedback(error.message, 'error');
@@ -1160,6 +1166,11 @@ const App = (() => {
       return;
     }
 
+    if (!state.currentOrder.itens || !state.currentOrder.itens.length) {
+      await closeEmptyOrder(state.currentOrder.id);
+      return;
+    }
+
     const confirmed = confirm('Eliminar/cancelar este pedido em aberto?');
 
     if (!confirmed) {
@@ -1200,7 +1211,44 @@ const App = (() => {
       logError('cancelCurrentOrder', error);
     } finally {
       state.isSubmitting = false;
-      setButtonLoading(els.btnCancelOrder, false, 'Eliminar pedido');
+      setButtonLoading(els.btnCancelOrder, false, getCancelOrderLabel());
+    }
+  }
+
+  function getCancelOrderLabel() {
+    const order = state.currentOrder;
+    return order && (!order.itens || !order.itens.length) ? 'Fechar comanda' : 'Eliminar pedido';
+  }
+
+  // Comanda sem itens não tem o que perder: fecha direto, sem PIN de administrador.
+  async function closeEmptyOrder(orderId) {
+    if (state.isSubmitting) {
+      return;
+    }
+
+    try {
+      state.isSubmitting = true;
+
+      await ReloadAPI.fecharComandaVazia({
+        pedidoId: orderId,
+        ...getOperatorPayload()
+      });
+
+      if (state.currentOrder && state.currentOrder.id === orderId) {
+        state.currentOrder = null;
+        clearCurrentOrderId();
+        els.orderClientSelect.value = '';
+        renderCurrentOrder();
+      }
+
+      await fetchOpenOrders();
+      showFeedback('Comanda vazia fechada.', 'success');
+      focusBarcodeInput();
+    } catch (error) {
+      showFeedback(error.message, 'error');
+      logError('closeEmptyOrder', error);
+    } finally {
+      state.isSubmitting = false;
     }
   }
 
@@ -1287,6 +1335,8 @@ const App = (() => {
   }
 
   function renderCurrentOrder() {
+    els.btnCancelOrder.textContent = getCancelOrderLabel();
+
     if (!state.currentOrder) {
       const pendingClient = state.clients.find(item => item.id === els.orderClientSelect.value);
       els.currentOrderId.textContent = pendingClient
@@ -2340,7 +2390,13 @@ const App = (() => {
       return;
     }
 
-    els.openOrdersList.innerHTML = state.openOrders.map(order => `
+    els.openOrdersList.innerHTML = state.openOrders.map(order => {
+      const isEmpty = !order.quantidadeItens;
+      const closeButton = isEmpty
+        ? `<button class="btn btn-danger btn-small" type="button" data-close-empty-order="${order.id}">Fechar comanda</button>`
+        : `<button class="btn btn-danger btn-small" type="button" data-cancel-open-order="${order.id}">Cancelar</button>`;
+
+      return `
       <article class="order-card clickable-card" data-open-order="${order.id}" title="Clique para abrir no PDV">
         <div class="order-card-header">
           <div>
@@ -2349,17 +2405,18 @@ const App = (() => {
             <p>Operador: ${escapeHtml(order.operadorNome || '--')}</p>
           </div>
 
-          <span class="status-badge status-warning">Aberto</span>
+          <span class="status-badge ${isEmpty ? 'status-neutral' : 'status-warning'}">${isEmpty ? 'Vazia' : 'Aberto'}</span>
         </div>
 
         <p>Total: <strong>${formatCurrency(order.total)}</strong></p>
 
         <div class="table-actions" style="margin-top: 12px;">
           <button class="btn btn-secondary btn-small" type="button" data-open-order="${order.id}">Abrir</button>
-          <button class="btn btn-danger btn-small" type="button" data-cancel-open-order="${order.id}">Cancelar</button>
+          ${closeButton}
         </div>
       </article>
-    `).join('');
+    `;
+    }).join('');
   }
 
 
@@ -3158,6 +3215,12 @@ const App = (() => {
       return;
     }
 
+    const closeEmptyOrderButton = event.target.closest('[data-close-empty-order]');
+    if (closeEmptyOrderButton) {
+      closeEmptyOrder(closeEmptyOrderButton.dataset.closeEmptyOrder);
+      return;
+    }
+
     const cancelOpenOrderButton = event.target.closest('[data-cancel-open-order]');
     if (cancelOpenOrderButton) {
       cancelOpenOrder(cancelOpenOrderButton.dataset.cancelOpenOrder);
@@ -3389,4 +3452,4 @@ const App = (() => {
     fullSync,
     lightSync
   };
-})();
+})();
