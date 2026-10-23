@@ -3389,4 +3389,4 @@ const App = (() => {
     fullSync,
     lightSync
   };
-})();
+})();
